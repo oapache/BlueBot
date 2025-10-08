@@ -39,7 +39,7 @@ This bot is ideal for freelancers or companies that want to automate affiliate l
 ---
 
 ## Project Structure
-
+```bash
 BlueBot/
 ├─ Affiliates/ # Affiliate link modules
 │ ├─ aliexpress_affiliate.py
@@ -57,14 +57,13 @@ BlueBot/
 ├─ requirements.txt # Python dependencies
 ├─ .env # Environment variables
 └─ README.md
-
+```
 ---
 
 ## Installation
-
+```
 1. Clone the repository:
 
-```
 git clone https://github.com/SaulloGabryel/BlueBot.git
 cd BlueBot
 Install Python dependencies:
@@ -103,8 +102,8 @@ WhatsApp Bot:
 cd Whatsapp
 npm run start
 On the first run, a QR code will appear to authenticate WhatsApp Web.
-
-Notes
+```
+## Notes
 The bot has been running for months on a VPS and is fully operational.
 
 node_modules/, Session/, and WhatsApp session files (.wwebjs_auth) are ignored in Git.
@@ -119,14 +118,13 @@ License
 
 MIT License © 2025
 
------
+
+--------------------------------------------------------------------------------------------------
+
+
+
 
 ## **README – Versão em Português**
-
-```markdown
-# BlueBot – Monitor de Afiliados para Telegram e WhatsApp
-
-![BlueBot Logo](logo-placeholder.png)
 
 **BlueBot** é um bot para monitoramento de grupos do Telegram que filtra mensagens de acordo com regras definidas pelo usuário, gera links de afiliados para produtos em marketplaces (Mercado Livre, Shopee e AliExpress) e envia as mensagens filtradas, incluindo mídias, para grupos do Telegram e WhatsApp.
 
@@ -167,7 +165,7 @@ Ideal para freelancers ou empresas que desejam automatizar o envio de links de a
 ---
 
 ## Estrutura do Projeto
-
+```
 BlueBot/
 ├─ Affiliates/ # Módulos de geração de links de afiliados
 │ ├─ aliexpress_affiliate.py
@@ -185,7 +183,7 @@ BlueBot/
 ├─ requirements.txt # Dependências Python
 ├─ .env # Variáveis de ambiente
 └─ README.md
-
+```
 ---
 
 ## Instalação
@@ -221,7 +219,7 @@ Bot do WhatsApp:
 cd Whatsapp
 npm run start
 Na primeira execução, será gerado um QR code para autenticar o WhatsApp Web.
-
+````
 Observações
 
 O bot já está rodando em VPS há meses, funcionando 24/7.
@@ -235,6 +233,4 @@ Contato
 Desenvolvido por Saullo Gabryel
 Contato: www.linkedin.com/in/saullo-gabryel-679687372 / saullo.g.dev@gmail.com
 
-Licença
-
-MIT License © 2025
+Licença MIT License © 2025
