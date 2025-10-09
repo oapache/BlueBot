@@ -103,6 +103,15 @@ cd Whatsapp
 npm run start
 On the first run, a QR code will appear to authenticate WhatsApp Web.
 ```
+## Screenshots / Demo
+Telegram monitoring: ![Telegram screenshot](Screenshots/bot_terminal.png)
+
+Telegram monitoring: ![Telegram screenshot](Screenshots/filter_test3.png)
+
+Telegram monitoring: ![Telegram screenshot](Screenshots/terminal_teste2.png)
+
+
+
 ## Notes
 The bot has been running for months on a VPS and is fully operational.
 
@@ -220,7 +229,15 @@ cd Whatsapp
 npm run start
 Na primeira execução, será gerado um QR code para autenticar o WhatsApp Web.
 ````
-Observações
+## Prints / Demo
+Telegram monitoring: ![Telegram screenshot](Screenshots/bot_terminal.png)
+
+Telegram monitoring: ![Telegram screenshot](Screenshots/filter_test3.png)
+
+Telegram monitoring: ![Telegram screenshot](Screenshots/terminal_teste2.png)
+
+
+## Observações
 
 O bot já está rodando em VPS há meses, funcionando 24/7.
 
