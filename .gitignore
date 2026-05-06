@@ -5,12 +5,18 @@ Whatsapp/node_modules/
 # Sessões e cache
 Whatsapp/.wwebjs_auth/
 Whatsapp/.wwebjs_cache/
+.wwebjs_auth/
+.wwebjs_cache/
+*.session
+*.session-journal
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.venv/
+.venv312/
 
 # Logs e temporários
 *.log

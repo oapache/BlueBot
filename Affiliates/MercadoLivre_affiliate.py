@@ -24,6 +24,60 @@ from selenium.webdriver.support import expected_conditions as EC
 import pyperclip
 import time
 import os
+from pathlib import Path
+
+
+def _resolve_browser_binary() -> str | None:
+    configured = os.getenv("BROWSER_BINARY_PATH")
+    if configured and Path(configured).exists():
+        return configured
+
+    candidates = []
+    if os.name == "nt":
+        local_app_data = os.getenv("LOCALAPPDATA", "")
+        program_files = os.getenv("PROGRAMFILES", r"C:\Program Files")
+        program_files_x86 = os.getenv("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        candidates.extend([
+            Path(program_files) / "BraveSoftware/Brave-Browser/Application/brave.exe",
+            Path(program_files_x86) / "BraveSoftware/Brave-Browser/Application/brave.exe",
+            Path(program_files) / "Google/Chrome/Application/chrome.exe",
+            Path(program_files_x86) / "Google/Chrome/Application/chrome.exe",
+            Path(local_app_data) / "Google/Chrome/Application/chrome.exe",
+        ])
+    else:
+        candidates.extend([
+            Path("/usr/bin/brave-browser"),
+            Path("/usr/bin/google-chrome"),
+            Path("/usr/bin/chromium-browser"),
+        ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    return None
+
+
+def _resolve_chromedriver_path() -> str:
+    configured = os.getenv("CHROMEDRIVER_PATH")
+    if configured and Path(configured).exists():
+        return configured
+
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        repo_root / "chromedriver.exe",
+        repo_root / "chromedriver",
+        Path(__file__).resolve().parent / "chromedriver.exe",
+        Path(__file__).resolve().parent / "chromedriver",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "ChromeDriver not found. Set CHROMEDRIVER_PATH in .env or place chromedriver in the project root."
+    )
 
 
 def gerar_link_mercadolivre(url: str) -> str | None:
@@ -39,18 +93,19 @@ def gerar_link_mercadolivre(url: str) -> str | None:
 
     print("[DEBUG] Starting gerar_link_mercadolivre")
 
-    # Paths for Brave browser and ChromeDriver
-    brave_path = "/usr/bin/brave-browser"
-    chromedriver_path = os.path.join(os.path.dirname(__file__), "chromedriver")
-    user_data_dir = "/root/.config/BraveSoftware/Brave-Browser/ProfileBot"
+    browser_binary = _resolve_browser_binary()
+    chromedriver_path = _resolve_chromedriver_path()
+    browser_profile_dir = os.getenv("BROWSER_PROFILE_DIR", "").strip()
 
     # Browser configuration
     options = Options()
-    options.binary_location = brave_path
+    if browser_binary:
+        options.binary_location = browser_binary
     options.add_argument("--no-sandbox")
-    options.add_argument("--user-data-dir=/root/.config/BraveSoftware/Brave-Browser")
-    options.add_argument("--profile-directory=Default")
     options.add_argument("--start-maximized")
+    if browser_profile_dir:
+        options.add_argument(f"--user-data-dir={browser_profile_dir}")
+        options.add_argument("--profile-directory=Default")
 
     service = Service(executable_path=chromedriver_path)
     driver = webdriver.Chrome(service=service, options=options)

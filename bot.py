@@ -9,7 +9,6 @@ import os
 import requests
 import base64
 import unicodedata
-import subprocess
 from dotenv import load_dotenv
 
 # Affiliate link generators
@@ -30,16 +29,35 @@ api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 
 # Required for headless execution environments (Linux servers)
-os.environ["DISPLAY"] = ":1"
+if os.name != "nt":
+    os.environ.setdefault("DISPLAY", ":1")
 
-# Telegram source and destination groups
-SOURCE_USERNAME = ""        # Telegram source group/channel
-DESTINATION_USERNAME = ""   # Telegram destination group for reposting
+
+def parse_env_list(name: str) -> list[str]:
+    raw_value = os.getenv(name, "")
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+def parse_chat_target(raw_value: str):
+    value = raw_value.strip()
+    if not value:
+        return ""
+    if re.fullmatch(r"-?\d+", value):
+        return int(value)
+    return value
+
+# Telegram source and optional destination groups
+SOURCE_CHAT = parse_chat_target(os.getenv("SOURCE_CHAT", os.getenv("SOURCE_USERNAME", "")))
+DESTINATION_CHAT = parse_chat_target(os.getenv("DESTINATION_CHAT", os.getenv("DESTINATION_USERNAME", "")))
+ENABLE_TELEGRAM_FORWARD = os.getenv("ENABLE_TELEGRAM_FORWARD", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 # Filter keywords to remove from messages
-filters = [
-    ""
-]
+filters = parse_env_list("FILTERS")
 
 # Normalize filters to avoid accent or spacing mismatches
 filters = [unicodedata.normalize("NFKD", f) for f in filters]
@@ -61,7 +79,7 @@ async def process_message(msg):
     - Avoids processing duplicates.
     - Cleans and filters out unwanted content.
     - Detects affiliate-supported URLs and replaces them.
-    - Forwards the final message (text/media) to WhatsApp and Telegram.
+    - Forwards the final message (text/media) to WhatsApp and optionally Telegram.
     """
     global last_id, destination_group
 
@@ -124,9 +142,6 @@ async def process_message(msg):
                     print("✅ Mercado Livre link replaced!")
             except Exception as e:
                 print(f"❌ Error generating Mercado Livre link: {e}")
-            finally:
-                subprocess.call(['pkill', '-f', 'brave'])  # Clean up browser process
-
         # ==============================
         # 💰 AliExpress
         # ==============================
@@ -195,16 +210,19 @@ async def process_message(msg):
         except Exception as e:
             print(f"❌ Error sending to WhatsApp: {e}")
 
-        # Forward message to Telegram destination group
+        # Forward message to Telegram destination group if enabled
         try:
-            if telegram_image_path:
-                await client.send_file(destination_group, telegram_image_path, caption=text)
-                os.remove(telegram_image_path)
-            else:
-                await client.send_message(destination_group, text)
-            print("✅ Message sent to Telegram group!")
+            if ENABLE_TELEGRAM_FORWARD and destination_group:
+                if telegram_image_path:
+                    await client.send_file(destination_group, telegram_image_path, caption=text)
+                else:
+                    await client.send_message(destination_group, text)
+                print("✅ Message sent to Telegram group!")
         except Exception as e:
             print(f"❌ Error sending message to Telegram: {e}")
+        finally:
+            if telegram_image_path and os.path.exists(telegram_image_path):
+                os.remove(telegram_image_path)
 
     else:
         print("⚠️ Nothing useful to send after filtering.")
@@ -219,13 +237,23 @@ async def main():
     the source group/channel for new messages.
     """
     global destination_group
+    if not SOURCE_CHAT:
+        raise RuntimeError("SOURCE_CHAT must be set in the .env file.")
+
     await client.start()
-    destination_group = await client.get_entity(DESTINATION_USERNAME)
+    if ENABLE_TELEGRAM_FORWARD:
+        if not DESTINATION_CHAT:
+            raise RuntimeError(
+                "DESTINATION_CHAT must be set in the .env file when ENABLE_TELEGRAM_FORWARD is enabled."
+            )
+        destination_group = await client.get_entity(DESTINATION_CHAT)
+    else:
+        destination_group = None
     print("🤖 Bot monitoring via polling...")
 
     while True:
         try:
-            async for msg in client.iter_messages(SOURCE_USERNAME, limit=1):
+            async for msg in client.iter_messages(SOURCE_CHAT, limit=1):
                 await process_message(msg)
         except Exception as e:
             print(f"Error fetching messages: {e}")

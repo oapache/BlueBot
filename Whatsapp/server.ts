@@ -7,6 +7,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function parseEnvList(name: string): string[] {
+  const value = process.env[name] ?? '';
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeGroupName(name: string): string {
+  return name.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 /**
  * Express app configuration
  * - Enables CORS
@@ -22,9 +34,7 @@ app.use(express.json({ limit: '10mb' }));
  *              The bot will cache these groups on startup and only send messages to them.
  * @example ["Deals Group", "Promo Watchers"]
  */
-const targetGroups = [
-  ""
-];
+const targetGroups = parseEnvList('WHATSAPP_TARGET_GROUPS');
 
 /**
  * @constant groupsCache
@@ -55,6 +65,22 @@ client.on('qr', (qr: string) => {
   qrcode.generate(qr, { small: true });
 });
 
+client.on('authenticated', () => {
+  console.log('🔐 WhatsApp session authenticated.');
+});
+
+client.on('auth_failure', (message: string) => {
+  console.error('❌ WhatsApp auth failure:', message);
+});
+
+client.on('loading_screen', (percent: string | number, message: string) => {
+  console.log(`⏳ WhatsApp loading: ${percent}% - ${message}`);
+});
+
+client.on('disconnected', (reason: string) => {
+  console.warn('⚠️ WhatsApp disconnected:', reason);
+});
+
 /**
  * Ready event handler
  * Fired once the WhatsApp client has successfully authenticated and connected.
@@ -63,14 +89,24 @@ client.on('qr', (qr: string) => {
 client.on('ready', async () => {
   console.log('✅ WhatsApp client is ready and authenticated.');
   const chats = await client.getChats();
+  const normalizedTargets = new Set(targetGroups.map(normalizeGroupName));
 
   // Filter and cache only the target groups specified in targetGroups[]
   groupsCache = chats
-    .filter((c) => c.isGroup && targetGroups.includes(c.name))
+    .filter((c) => c.isGroup && normalizedTargets.has(normalizeGroupName(c.name)))
     .map((c) => ({ name: c.name, id: c.id._serialized }));
 
   console.log('📋 Cached groups:');
   groupsCache.forEach((g) => console.log(`- ${g.name}`));
+  if (groupsCache.length === 0) {
+    console.warn('⚠️ No matching WhatsApp groups were found for WHATSAPP_TARGET_GROUPS.');
+    console.log('📚 Available WhatsApp groups seen by the session:');
+    chats
+      .filter((c) => c.isGroup)
+      .map((c) => c.name)
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((name) => console.log(`- ${name}`));
+  }
 });
 
 /**
