@@ -1,7 +1,7 @@
 # ==============================
 # 🧩 Imports and Configuration
 # ==============================
-from telethon import TelegramClient
+from telethon import TelegramClient, utils
 from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 import re
 import asyncio
@@ -66,6 +66,20 @@ filters = [unicodedata.normalize("NFKD", f) for f in filters]
 client = TelegramClient("polling_session", api_id, api_hash)
 last_id = None
 destination_group = None
+
+
+async def resolve_chat_entity(target):
+    if not isinstance(target, int):
+        return await client.get_entity(target)
+
+    real_id, peer_type = utils.resolve_id(target)
+
+    # Warm Telethon's entity cache from the account dialogs before resolving by ID.
+    await client.get_dialogs()
+
+    entity = await client.get_entity(peer_type(real_id))
+    print(f"✅ Resolved Telegram target {target} -> {type(entity).__name__} ({real_id})")
+    return entity
 
 
 # ==============================
@@ -246,14 +260,15 @@ async def main():
             raise RuntimeError(
                 "DESTINATION_CHAT must be set in the .env file when ENABLE_TELEGRAM_FORWARD is enabled."
             )
-        destination_group = await client.get_entity(DESTINATION_CHAT)
+        destination_group = await resolve_chat_entity(DESTINATION_CHAT)
     else:
         destination_group = None
+    source_chat = await resolve_chat_entity(SOURCE_CHAT)
     print("🤖 Bot monitoring via polling...")
 
     while True:
         try:
-            async for msg in client.iter_messages(SOURCE_CHAT, limit=1):
+            async for msg in client.iter_messages(source_chat, limit=1):
                 await process_message(msg)
         except Exception as e:
             print(f"Error fetching messages: {e}")
