@@ -166,11 +166,13 @@ async def process_message(msg):
                 expanded_link = expand_url(link)
                 print(f"🔗 Generating Mercado Livre affiliate link for: {link} -> {expanded_link}")
                 affiliate_link = gerar_link_mercadolivre(expanded_link)
-                if affiliate_link:
+                if affiliate_link and affiliate_link.startswith(("http://", "https://")):
                     text = text.replace(link, affiliate_link)
                     if expanded_link != link:
                         text = text.replace(expanded_link, affiliate_link)
                     print("✅ Mercado Livre link replaced!")
+                else:
+                    print(f"⚠️ Ignoring invalid Mercado Livre affiliate link: {affiliate_link}")
             except Exception as e:
                 print(f"❌ Error generating Mercado Livre link: {e}")
         # ==============================

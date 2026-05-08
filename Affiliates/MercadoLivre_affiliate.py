@@ -25,6 +25,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 import pyperclip
 import time
 import os
+import re
 from pathlib import Path
 
 
@@ -79,6 +80,37 @@ def _resolve_chromedriver_path() -> str:
     raise FileNotFoundError(
         "ChromeDriver not found. Set CHROMEDRIVER_PATH in .env or place chromedriver in the project root."
     )
+
+
+def _looks_like_url(value: str | None) -> bool:
+    if not value:
+        return False
+    return bool(re.match(r"^https?://", value.strip(), re.IGNORECASE))
+
+
+def _extract_share_url_from_modal(driver) -> str | None:
+    candidates = [
+        (By.XPATH, "//input[starts-with(@value, 'http')]"),
+        (By.XPATH, "//textarea[starts-with(normalize-space(.), 'http')]"),
+        (By.XPATH, "//a[starts-with(@href, 'http')]"),
+    ]
+
+    for selector in candidates:
+        try:
+            elements = driver.find_elements(*selector)
+            for element in elements:
+                value = (
+                    element.get_attribute("value")
+                    or element.get_attribute("href")
+                    or element.text
+                )
+                if _looks_like_url(value):
+                    print(f"[DEBUG] Share URL extracted from modal: {value}")
+                    return value.strip()
+        except Exception:
+            continue
+
+    return None
 
 
 def gerar_link_mercadolivre(url: str) -> str | None:
@@ -229,8 +261,18 @@ def gerar_link_mercadolivre(url: str) -> str | None:
         time.sleep(2)  # Ensure clipboard data is updated
 
         # --- STEP 5: Retrieve the affiliate link from clipboard ---
-        link_afiliado = pyperclip.paste()
-        print(f"[DEBUG] Affiliate link copied: {link_afiliado}")
+        link_afiliado = pyperclip.paste().strip()
+        print(f"[DEBUG] Affiliate link copied from clipboard: {link_afiliado}")
+
+        if not _looks_like_url(link_afiliado):
+            print("[DEBUG] Clipboard did not contain a valid URL, trying to extract from modal.")
+            extracted_link = _extract_share_url_from_modal(driver)
+            if extracted_link:
+                link_afiliado = extracted_link
+
+        if not _looks_like_url(link_afiliado):
+            print(f"[ERROR] Invalid affiliate link captured: {link_afiliado!r}")
+            return None
 
         return link_afiliado
 
