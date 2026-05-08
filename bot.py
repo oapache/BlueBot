@@ -84,6 +84,24 @@ ENABLE_TELEGRAM_FORWARD = os.getenv("ENABLE_TELEGRAM_FORWARD", "false").strip().
     "yes",
     "on",
 }
+ENABLE_MERCADOLIVRE = os.getenv("ENABLE_MERCADOLIVRE", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+ENABLE_SHOPEE = os.getenv("ENABLE_SHOPEE", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 # Filter keywords to remove from messages
 filters = parse_env_list("FILTERS")
@@ -178,24 +196,25 @@ async def process_message(msg):
         # ==============================
         # 💰 Mercado Livre
         # ==============================
-        for link in ml_links:
-            try:
-                expanded_link = expand_url(link)
-                print(f"🔗 Generating Mercado Livre affiliate link for: {link} -> {expanded_link}")
-                affiliate_link = gerar_link_mercadolivre(expanded_link)
-                if affiliate_link and affiliate_link.startswith(("http://", "https://")):
-                    text = text.replace(link, affiliate_link)
-                    if expanded_link != link:
-                        text = text.replace(expanded_link, affiliate_link)
-                    print("✅ Mercado Livre link replaced!")
-                else:
-                    print(f"⚠️ Ignoring invalid Mercado Livre affiliate link: {affiliate_link}")
-            except Exception as e:
-                print(f"❌ Error generating Mercado Livre link: {e}")
+        if ENABLE_MERCADOLIVRE:
+            for link in ml_links:
+                try:
+                    expanded_link = expand_url(link)
+                    print(f"🔗 Generating Mercado Livre affiliate link for: {link} -> {expanded_link}")
+                    affiliate_link = gerar_link_mercadolivre(expanded_link)
+                    if affiliate_link and affiliate_link.startswith(("http://", "https://")):
+                        text = text.replace(link, affiliate_link)
+                        if expanded_link != link:
+                            text = text.replace(expanded_link, affiliate_link)
+                        print("✅ Mercado Livre link replaced!")
+                    else:
+                        print(f"⚠️ Ignoring invalid Mercado Livre affiliate link: {affiliate_link}")
+                except Exception as e:
+                    print(f"❌ Error generating Mercado Livre link: {e}")
         # ==============================
         # 💰 AliExpress
         # ==============================
-        if ali_links:
+        if ENABLE_ALIEXPRESS and ali_links:
             try:
                 print(f"🔗 Generating AliExpress affiliate links for: {ali_links}")
                 affiliate_links = gerar_links_afiliado_aliexpress(
@@ -218,15 +237,16 @@ async def process_message(msg):
         # ==============================
         # 💰 Shopee
         # ==============================
-        for link in shopee_links:
-            try:
-                print(f"🔗 Generating Shopee link: {link}")
-                affiliate_link = await gerar_link_afiliado_shopee(link)
-                if affiliate_link:
-                    text = text.replace(link, affiliate_link)
-                    print(f"✅ Shopee link replaced!")
-            except Exception as e:
-                print(f"❌ Shopee error: {e}")
+        if ENABLE_SHOPEE:
+            for link in shopee_links:
+                try:
+                    print(f"🔗 Generating Shopee link: {link}")
+                    affiliate_link = await gerar_link_afiliado_shopee(link)
+                    if affiliate_link:
+                        text = text.replace(link, affiliate_link)
+                        print(f"✅ Shopee link replaced!")
+                except Exception as e:
+                    print(f"❌ Shopee error: {e}")
 
         # ==============================
         # 📤 Message Forwarding
