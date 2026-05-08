@@ -21,6 +21,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 import pyperclip
 import time
 import os
@@ -130,57 +131,92 @@ def gerar_link_mercadolivre(url: str) -> str | None:
         except Exception:
             print("🍪 No visible cookie banner found")
 
-        # --- STEP 2: Click “Access Product” ---
-        print("[DEBUG] Attempting to click 'Access product'")
-        acessar_produto = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "/html/body/main/div/div/div[2]/div[2]/section/section/section/div/ul/div/div[2]",
+        # Some Mercado Livre short/share pages open an intermediate card before the
+        # actual product page. When present, click through it; otherwise continue.
+        access_product_selectors = [
+            (By.XPATH, "//div[contains(., 'Acessar produto') and @role='button']"),
+            (By.XPATH, "//button[contains(., 'Acessar produto')]"),
+            (By.XPATH, "//a[contains(., 'Acessar produto')]"),
+        ]
+        for selector in access_product_selectors:
+            try:
+                print("[DEBUG] Attempting to click 'Access product'")
+                acessar_produto = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable(selector)
                 )
-            )
-        )
-        acessar_produto.click()
-        print("[DEBUG] Clicked 'Access product'")
-        time.sleep(5)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", acessar_produto)
+                acessar_produto.click()
+                print("[DEBUG] Clicked 'Access product'")
+                time.sleep(5)
+                break
+            except Exception:
+                continue
 
         # --- STEP 3: Click “Share” button (with retry logic) ---
-        try:
-            print("[DEBUG] Trying to click 'Share'")
-            compartilhar_btn = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, "/html/body/div[2]/nav/div/div[3]/div/div/button")
+        share_selectors = [
+            (By.CSS_SELECTOR, "button[data-testid='generate_link_button']"),
+            (By.XPATH, "//button[@data-testid='generate_link_button']"),
+            (By.XPATH, "//button[contains(., 'Compartilhar')]"),
+            (By.XPATH, "//span[normalize-space()='Compartilhar']/ancestor::button[1]"),
+            (By.CSS_SELECTOR, "button.generate_link_button"),
+        ]
+        last_share_error = None
+        compartilhar_btn = None
+        for selector in share_selectors:
+            try:
+                print(f"[DEBUG] Trying to click 'Share' with selector: {selector}")
+                compartilhar_btn = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(selector)
                 )
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", compartilhar_btn)
-            compartilhar_btn.click()
-            print("[DEBUG] Clicked 'Share'")
-            time.sleep(2)
-        except Exception as e:
-            print(f"[ERROR] Failed to click 'Share': {e}")
-            print("[DEBUG] Waiting 5 seconds before retry...")
-            time.sleep(5)
-            compartilhar_btn = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, "/html/body/div[2]/nav/div/div[3]/div/div/button")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", compartilhar_btn)
+                WebDriverWait(driver, 10).until(
+                    lambda d: compartilhar_btn.is_displayed() and compartilhar_btn.is_enabled()
                 )
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", compartilhar_btn)
-            compartilhar_btn.click()
-            print("[DEBUG] Clicked 'Share' on second attempt")
-            time.sleep(2)
+                try:
+                    compartilhar_btn.click()
+                except Exception:
+                    try:
+                        ActionChains(driver).move_to_element(compartilhar_btn).click().perform()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", compartilhar_btn)
+                print("[DEBUG] Clicked 'Share'")
+                time.sleep(2)
+                break
+            except Exception as e:
+                last_share_error = e
+                compartilhar_btn = None
+                continue
+
+        if compartilhar_btn is None:
+            raise RuntimeError(f"Failed to click 'Share' with known selectors: {last_share_error}")
 
         # --- STEP 4: Click “Copy Link” ---
         print("[DEBUG] Trying to click 'Copy link'")
-        copiar_botao = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "/html/body/div[2]/nav/div/div[3]/div/div[2]/div/div/div/div/div[2]/div/div/div/div[2]/div/div/div/button",
+        copy_selectors = [
+            (By.XPATH, "//button[contains(., 'Copiar link')]"),
+            (By.XPATH, "//span[normalize-space()='Copiar link']/ancestor::button[1]"),
+            (By.XPATH, "//button[contains(., 'Copiar')]"),
+        ]
+        copiar_botao = None
+        last_copy_error = None
+        for selector in copy_selectors:
+            try:
+                copiar_botao = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable(selector)
                 )
-            )
-        )
-        copiar_botao.click()
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", copiar_botao)
+                try:
+                    copiar_botao.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", copiar_botao)
+                break
+            except Exception as e:
+                last_copy_error = e
+                copiar_botao = None
+                continue
+
+        if copiar_botao is None:
+            raise RuntimeError(f"Failed to click 'Copy link' with known selectors: {last_copy_error}")
         print("[DEBUG] Clicked 'Copy link'")
         time.sleep(2)  # Ensure clipboard data is updated
 
