@@ -47,6 +47,21 @@ def parse_chat_target(raw_value: str):
     return value
 
 
+def parse_chat_targets_env() -> list[int | str]:
+    multi_value = os.getenv("SOURCE_CHATS", "").strip()
+    if multi_value:
+        return [
+            parse_chat_target(item)
+            for item in multi_value.split(",")
+            if item.strip()
+        ]
+
+    single_value = os.getenv("SOURCE_CHAT", os.getenv("SOURCE_USERNAME", "")).strip()
+    if not single_value:
+        return []
+    return [parse_chat_target(single_value)]
+
+
 def expand_url(url: str) -> str:
     try:
         response = requests.get(
@@ -61,7 +76,7 @@ def expand_url(url: str) -> str:
         return url
 
 # Telegram source and optional destination groups
-SOURCE_CHAT = parse_chat_target(os.getenv("SOURCE_CHAT", os.getenv("SOURCE_USERNAME", "")))
+SOURCE_CHATS = parse_chat_targets_env()
 DESTINATION_CHAT = parse_chat_target(os.getenv("DESTINATION_CHAT", os.getenv("DESTINATION_USERNAME", "")))
 ENABLE_TELEGRAM_FORWARD = os.getenv("ENABLE_TELEGRAM_FORWARD", "false").strip().lower() in {
     "1",
@@ -78,7 +93,7 @@ filters = [unicodedata.normalize("NFKD", f) for f in filters]
 
 # Initialize Telegram client
 client = TelegramClient("polling_session", api_id, api_hash)
-last_id = None
+last_ids: dict[str, int] = {}
 destination_group = None
 
 
@@ -109,12 +124,14 @@ async def process_message(msg):
     - Detects affiliate-supported URLs and replaces them.
     - Forwards the final message (text/media) to WhatsApp and optionally Telegram.
     """
-    global last_id, destination_group
+    global destination_group
+
+    chat_key = str(getattr(msg.peer_id, "channel_id", None) or getattr(msg.peer_id, "chat_id", None) or getattr(msg.peer_id, "user_id", None) or "unknown")
 
     # Skip already processed message
-    if msg.id == last_id:
+    if msg.id == last_ids.get(chat_key):
         return
-    last_id = msg.id
+    last_ids[chat_key] = msg.id
 
     # Normalize message text
     text = unicodedata.normalize("NFKD", msg.raw_text)
@@ -270,8 +287,8 @@ async def main():
     the source group/channel for new messages.
     """
     global destination_group
-    if not SOURCE_CHAT:
-        raise RuntimeError("SOURCE_CHAT must be set in the .env file.")
+    if not SOURCE_CHATS:
+        raise RuntimeError("SOURCE_CHAT or SOURCE_CHATS must be set in the .env file.")
 
     await client.start()
     if ENABLE_TELEGRAM_FORWARD:
@@ -282,15 +299,16 @@ async def main():
         destination_group = await resolve_chat_entity(DESTINATION_CHAT)
     else:
         destination_group = None
-    source_chat = await resolve_chat_entity(SOURCE_CHAT)
-    print("🤖 Bot monitoring via polling...")
+    source_chats = [await resolve_chat_entity(target) for target in SOURCE_CHATS]
+    print(f"🤖 Bot monitoring via polling for {len(source_chats)} source chat(s)...")
 
     while True:
-        try:
-            async for msg in client.iter_messages(source_chat, limit=1):
-                await process_message(msg)
-        except Exception as e:
-            print(f"Error fetching messages: {e}")
+        for source_chat in source_chats:
+            try:
+                async for msg in client.iter_messages(source_chat, limit=1):
+                    await process_message(msg)
+            except Exception as e:
+                print(f"Error fetching messages from {getattr(source_chat, 'id', source_chat)}: {e}")
         await asyncio.sleep(5)
 
 
