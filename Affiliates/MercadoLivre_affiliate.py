@@ -199,8 +199,10 @@ def gerar_link_mercadolivre(url: str) -> str | None:
         # --- STEP 4: Click “Copy Link” ---
         print("[DEBUG] Trying to click 'Copy link'")
         copy_selectors = [
+            (By.XPATH, "//*[@id='P0-2']/div/div/div/div[2]/div/div/div/div[2]/div/div/div"),
             (By.XPATH, "//button[contains(., 'Copiar link')]"),
             (By.XPATH, "//span[normalize-space()='Copiar link']/ancestor::button[1]"),
+            (By.XPATH, "//div[contains(., 'Copiar link')]"),
             (By.XPATH, "//button[contains(., 'Copiar')]"),
         ]
         copiar_botao = None
