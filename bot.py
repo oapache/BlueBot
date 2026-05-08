@@ -46,6 +46,20 @@ def parse_chat_target(raw_value: str):
         return int(value)
     return value
 
+
+def expand_url(url: str) -> str:
+    try:
+        response = requests.get(
+            url,
+            allow_redirects=True,
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        return response.url
+    except Exception as e:
+        print(f"⚠️ Failed to expand URL {url}: {e}")
+        return url
+
 # Telegram source and optional destination groups
 SOURCE_CHAT = parse_chat_target(os.getenv("SOURCE_CHAT", os.getenv("SOURCE_USERNAME", "")))
 DESTINATION_CHAT = parse_chat_target(os.getenv("DESTINATION_CHAT", os.getenv("DESTINATION_USERNAME", "")))
@@ -136,7 +150,7 @@ async def process_message(msg):
         # 🔍 URL Pattern Detection
         # ==============================
         shopee_pattern = r'(https?://(?:www\.)?(?:shopee\.com\.br|s\.shopee\.com\.br)/[^\s]+)'
-        ml_pattern = r'(https?://(?:www\.)?(?:mercadolivre\.com(?:\.br)?)/[^\s]+|https?://(?:www\.)?mercadolivre\.com(?:\.br)?/sec/[^\s]+)'
+        ml_pattern = r'(https?://(?:www\.)?(?:mercadolivre\.com(?:\.br)?|meli\.la)/[^\s]+|https?://(?:www\.)?mercadolivre\.com(?:\.br)?/sec/[^\s]+)'
         aliexpress_pattern = r'(?:https?://)?(?:www\.)?(?:aliexpress\.com|a\.aliexpress\.com)/[^\s]+'
 
         ali_links_raw = re.findall(aliexpress_pattern, text)
@@ -149,10 +163,13 @@ async def process_message(msg):
         # ==============================
         for link in ml_links:
             try:
-                print(f"🔗 Generating Mercado Livre affiliate link for: {link}")
-                affiliate_link = gerar_link_mercadolivre(link)
+                expanded_link = expand_url(link)
+                print(f"🔗 Generating Mercado Livre affiliate link for: {link} -> {expanded_link}")
+                affiliate_link = gerar_link_mercadolivre(expanded_link)
                 if affiliate_link:
                     text = text.replace(link, affiliate_link)
+                    if expanded_link != link:
+                        text = text.replace(expanded_link, affiliate_link)
                     print("✅ Mercado Livre link replaced!")
             except Exception as e:
                 print(f"❌ Error generating Mercado Livre link: {e}")
