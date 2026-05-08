@@ -134,7 +134,13 @@ def gerar_link_mercadolivre(url: str) -> str | None:
         # Some Mercado Livre short/share pages open an intermediate card before the
         # actual product page. When present, click through it; otherwise continue.
         access_product_selectors = [
+            (
+                By.XPATH,
+                "//*[@id='root-app']/div/div/div[2]/div[2]/section/section/section/div/ul/div/div[2]/div/div[2]/div/div/a",
+            ),
             (By.XPATH, "//div[contains(., 'Acessar produto') and @role='button']"),
+            (By.XPATH, "//a[contains(., 'Ir para produto')]"),
+            (By.XPATH, "//span[contains(., 'Ir para produto')]/ancestor::a[1]"),
             (By.XPATH, "//button[contains(., 'Acessar produto')]"),
             (By.XPATH, "//a[contains(., 'Acessar produto')]"),
         ]
