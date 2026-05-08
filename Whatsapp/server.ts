@@ -55,6 +55,57 @@ const client = new Client({
   },
 });
 
+process.on('unhandledRejection', (reason) => {
+  console.error('🧪 DEBUG unhandledRejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('🧪 DEBUG uncaughtException:', error);
+});
+
+const internalClient = client as any;
+const originalInject = internalClient.inject.bind(client);
+internalClient.inject = (async (...args: any[]) => {
+  const page = internalClient.pupPage;
+  console.log('🧪 DEBUG inject:start', {
+    hasPage: Boolean(page),
+    url: page?.url?.() ?? 'unavailable',
+  });
+
+  try {
+    const result = await originalInject(...args);
+    console.log('🧪 DEBUG inject:success', {
+      url: page?.url?.() ?? 'unavailable',
+    });
+    return result;
+  } catch (error) {
+    let readyState = 'unavailable';
+    let title = 'unavailable';
+
+    if (page) {
+      try {
+        readyState = await page.evaluate(() => document.readyState);
+      } catch (evaluateError) {
+        readyState = `evaluate_failed: ${String(evaluateError)}`;
+      }
+
+      try {
+        title = await page.title();
+      } catch (titleError) {
+        title = `title_failed: ${String(titleError)}`;
+      }
+    }
+
+    console.error('🧪 DEBUG inject:error', {
+      error,
+      url: page?.url?.() ?? 'unavailable',
+      readyState,
+      title,
+    });
+    throw error;
+  }
+}) as typeof originalInject;
+
 /**
  * QR Code event handler
  * Triggered when WhatsApp Web needs a new authentication QR code.
@@ -79,6 +130,10 @@ client.on('loading_screen', (percent: string | number, message: string) => {
 
 client.on('disconnected', (reason: string) => {
   console.warn('⚠️ WhatsApp disconnected:', reason);
+});
+
+client.on('change_state', (state: string) => {
+  console.log('🧪 DEBUG change_state:', state);
 });
 
 /**
