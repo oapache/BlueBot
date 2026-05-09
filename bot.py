@@ -75,6 +75,10 @@ def expand_url(url: str) -> str:
         print(f"⚠️ Failed to expand URL {url}: {e}")
         return url
 
+
+def get_all_urls(text: str) -> list[str]:
+    return re.findall(r'https?://[^\s]+', text, re.IGNORECASE)
+
 # Telegram source and optional destination groups
 SOURCE_CHATS = parse_chat_targets_env()
 DESTINATION_CHAT = parse_chat_target(os.getenv("DESTINATION_CHAT", os.getenv("DESTINATION_USERNAME", "")))
@@ -169,11 +173,6 @@ async def process_message(msg):
         print("⚠️ Message ignored (contains AliExpress coin campaign or Mercado Livre coupons).")
         return
 
-    # Block forbidden stores
-    if re.search(r"(amazon\.com(?:\.br)?|amzn\.to|magazineluiza\.com\.br|magazineluiza\.onelink\.me)", text, re.IGNORECASE):
-        print("⚠️ Message ignored (contains Amazon or Magazine Luiza link).")
-        return
-
     # Remove custom filters
     for f in filters:
         text = re.sub(re.escape(f), '', text, flags=re.IGNORECASE)
@@ -196,6 +195,7 @@ async def process_message(msg):
         shopee_pattern = r'(https?://(?:www\.)?(?:shopee\.com\.br|s\.shopee\.com\.br)/[^\s]+)'
         ml_pattern = r'(https?://(?:www\.)?(?:mercadolivre\.com(?:\.br)?|meli\.la)/[^\s]+|https?://(?:www\.)?mercadolivre\.com(?:\.br)?/sec/[^\s]+)'
         aliexpress_pattern = r'(?:https?://)?(?:www\.)?(?:aliexpress\.com|a\.aliexpress\.com)/[^\s]+'
+        all_urls = get_all_urls(text)
 
         ali_links_raw = re.findall(aliexpress_pattern, text)
         ali_links = [link if link.startswith("http") else "https://" + link for link in ali_links_raw]
@@ -207,8 +207,15 @@ async def process_message(msg):
                 "mercadolivre": len(ml_links),
                 "shopee": len(shopee_links),
                 "aliexpress": len(ali_links),
+                "all_urls": len(all_urls),
             },
         )
+        if ENABLE_MERCADOLIVRE and not ENABLE_SHOPEE and not ENABLE_ALIEXPRESS:
+            non_ml_urls = [url for url in all_urls if url not in ml_links]
+            if non_ml_urls and not ml_links:
+                print("⚠️ Message ignored (contains only non-Mercado Livre URLs).")
+                return
+
         has_enabled_marketplace_link = (
             (ENABLE_MERCADOLIVRE and bool(ml_links))
             or (ENABLE_ALIEXPRESS and bool(ali_links))
