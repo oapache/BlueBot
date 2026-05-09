@@ -192,6 +192,15 @@ async def process_message(msg):
         ali_links = [link if link.startswith("http") else "https://" + link for link in ali_links_raw]
         shopee_links = re.findall(shopee_pattern, text)
         ml_links = re.findall(ml_pattern, text)
+        has_enabled_marketplace_link = (
+            (ENABLE_MERCADOLIVRE and bool(ml_links))
+            or (ENABLE_ALIEXPRESS and bool(ali_links))
+            or (ENABLE_SHOPEE and bool(shopee_links))
+        )
+
+        if not has_enabled_marketplace_link:
+            print("⚠️ Message ignored (contains no links from enabled marketplaces).")
+            return
 
         # ==============================
         # 💰 Mercado Livre
