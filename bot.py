@@ -103,6 +103,15 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
     "on",
 }
 
+print(
+    "⚙️ Marketplaces enabled:",
+    {
+        "mercadolivre": ENABLE_MERCADOLIVRE,
+        "shopee": ENABLE_SHOPEE,
+        "aliexpress": ENABLE_ALIEXPRESS,
+    },
+)
+
 # Filter keywords to remove from messages
 filters = parse_env_list("FILTERS")
 
@@ -192,6 +201,14 @@ async def process_message(msg):
         ali_links = [link if link.startswith("http") else "https://" + link for link in ali_links_raw]
         shopee_links = re.findall(shopee_pattern, text)
         ml_links = re.findall(ml_pattern, text)
+        print(
+            "🧪 DEBUG detected links:",
+            {
+                "mercadolivre": len(ml_links),
+                "shopee": len(shopee_links),
+                "aliexpress": len(ali_links),
+            },
+        )
         has_enabled_marketplace_link = (
             (ENABLE_MERCADOLIVRE and bool(ml_links))
             or (ENABLE_ALIEXPRESS and bool(ali_links))
