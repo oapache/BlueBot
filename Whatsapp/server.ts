@@ -174,9 +174,11 @@ client.on('ready', async () => {
  */
 async function sendToGroups(text: string, base64Image?: string, mimeType?: string) {
   if (groupsCache.length === 0) {
-    console.warn('⚠️ No groups loaded. Make sure the target group names exist.');
-    return;
+    throw new Error('No WhatsApp groups are currently cached.');
   }
+
+  let successCount = 0;
+  const failures: { group: string; error: string }[] = [];
 
   for (const group of groupsCache) {
     try {
@@ -189,13 +191,28 @@ async function sendToGroups(text: string, base64Image?: string, mimeType?: strin
         await client.sendMessage(group.id, text);
       }
       console.log(`📤 Message successfully sent to ${group.name}`);
+      successCount += 1;
     } catch (err: any) {
       console.error(`❌ Error sending to ${group.name}:`, err);
+      failures.push({
+        group: group.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Wait 1s between sends to reduce risk of being flagged
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+
+  if (successCount === 0) {
+    throw new Error(`Failed to send message to every configured WhatsApp group: ${JSON.stringify(failures)}`);
+  }
+
+  return {
+    successCount,
+    failureCount: failures.length,
+    failures,
+  };
 }
 
 /**
@@ -216,11 +233,14 @@ async function sendToGroups(text: string, base64Image?: string, mimeType?: strin
 app.post('/send', async (req: Request, res: Response) => {
   const { text, base64Image, mimeType } = req.body;
   try {
-    await sendToGroups(text, base64Image, mimeType);
-    res.status(200).send({ status: 'ok' });
+    const result = await sendToGroups(text, base64Image, mimeType);
+    res.status(200).send({ status: 'ok', ...result });
   } catch (err: any) {
     console.error('❌ Error sending message:', err);
-    res.status(500).send({ error: 'Error sending message' });
+    res.status(500).send({
+      error: 'Error sending message',
+      details: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 
