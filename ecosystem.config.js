@@ -1,0 +1,30 @@
+module.exports = {
+  apps: [
+    {
+      name: "bluebot-whatsapp",
+      cwd: "/opt/bluebot",
+      script: "npx",
+      args: "ts-node Whatsapp/server.ts",
+      interpreter: "none",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_restarts: 20,
+      restart_delay: 5000,
+    },
+    {
+      name: "bluebot-telegram",
+      cwd: "/opt/bluebot",
+      script: "/usr/bin/bash",
+      args: "-lc 'cd /opt/bluebot && source .venv/bin/activate && python bot.py'",
+      interpreter: "none",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_restarts: 20,
+      restart_delay: 5000,
+    },
+  ],
+};
