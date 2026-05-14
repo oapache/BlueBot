@@ -142,6 +142,20 @@ async def resolve_chat_entity(target):
     return entity
 
 
+async def resolve_source_chats(targets):
+    source_chats = []
+    for target in targets:
+        try:
+            source_chats.append(await resolve_chat_entity(target))
+        except Exception as e:
+            print(f"⚠️ Skipping Telegram source {target}: {e}")
+
+    if not source_chats:
+        raise RuntimeError("No Telegram source chats could be resolved. Check SOURCE_CHATS and account access.")
+
+    return source_chats
+
+
 # ==============================
 # ⚙️ Message Processing Function
 # ==============================
@@ -352,7 +366,7 @@ async def main():
         destination_group = await resolve_chat_entity(DESTINATION_CHAT)
     else:
         destination_group = None
-    source_chats = [await resolve_chat_entity(target) for target in SOURCE_CHATS]
+    source_chats = await resolve_source_chats(SOURCE_CHATS)
     print(f"🤖 Bot monitoring via polling for {len(source_chats)} source chat(s)...")
 
     while True:
