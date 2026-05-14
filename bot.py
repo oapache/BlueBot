@@ -9,6 +9,8 @@ import os
 import requests
 import base64
 import unicodedata
+import time
+import hashlib
 from dotenv import load_dotenv
 
 # Affiliate link generators
@@ -79,6 +81,34 @@ def expand_url(url: str) -> str:
 def get_all_urls(text: str) -> list[str]:
     return re.findall(r'https?://[^\s]+', text, re.IGNORECASE)
 
+
+def normalize_for_dedup(text: str) -> str:
+    text_without_urls = re.sub(r'https?://[^\s]+', '', text, flags=re.IGNORECASE)
+    normalized = unicodedata.normalize("NFKD", text_without_urls)
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = normalized.lower()
+    normalized = re.sub(r'[^a-z0-9]+', ' ', normalized)
+    return re.sub(r'\s+', ' ', normalized).strip()
+
+
+def make_dedup_key(text: str, ml_links: list[str]) -> str:
+    if ml_links:
+        normalized_links = sorted(link.rstrip(".,;:!?)\"]}'") for link in ml_links)
+        raw_key = "ml-links:" + "|".join(normalized_links)
+    else:
+        raw_key = "text:" + normalize_for_dedup(text)
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def cleanup_seen_messages(now: float):
+    expired_keys = [
+        key
+        for key, seen_at in seen_message_keys.items()
+        if now - seen_at > DEDUP_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        del seen_message_keys[key]
+
 # Telegram source and optional destination groups
 SOURCE_CHATS = parse_chat_targets_env()
 DESTINATION_CHAT = parse_chat_target(os.getenv("DESTINATION_CHAT", os.getenv("DESTINATION_USERNAME", "")))
@@ -106,6 +136,7 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
     "yes",
     "on",
 }
+DEDUP_TTL_SECONDS = int(os.getenv("DEDUP_TTL_SECONDS", "21600"))
 
 print(
     "⚙️ Marketplaces enabled:",
@@ -125,6 +156,7 @@ filters = [unicodedata.normalize("NFKD", f) for f in filters]
 # Initialize Telegram client
 client = TelegramClient("polling_session", api_id, api_hash)
 last_ids: dict[str, int] = {}
+seen_message_keys: dict[str, float] = {}
 destination_group = None
 
 
@@ -239,6 +271,14 @@ async def process_message(msg):
         if not has_enabled_marketplace_link:
             print("⚠️ Message ignored (contains no links from enabled marketplaces).")
             return
+
+        now = time.time()
+        cleanup_seen_messages(now)
+        dedup_key = make_dedup_key(text, ml_links)
+        if dedup_key in seen_message_keys:
+            print("⚠️ Message ignored (duplicate offer already processed).")
+            return
+        seen_message_keys[dedup_key] = now
 
         # ==============================
         # 💰 Mercado Livre
