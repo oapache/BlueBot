@@ -180,8 +180,6 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
 }
 DEDUP_TTL_SECONDS = int(os.getenv("DEDUP_TTL_SECONDS", "21600"))
 DEDUP_STORE_PATH = os.getenv("DEDUP_STORE_PATH", ".dedup_seen.json")
-MEDIA_DOWNLOAD_TIMEOUT_SECONDS = float(os.getenv("MEDIA_DOWNLOAD_TIMEOUT_SECONDS", "0"))
-WHATSAPP_SEND_TIMEOUT_SECONDS = float(os.getenv("WHATSAPP_SEND_TIMEOUT_SECONDS", "60"))
 
 print(
     "⚙️ Marketplaces enabled:",
@@ -231,16 +229,6 @@ async def resolve_source_chats(targets):
         raise RuntimeError("No Telegram source chats could be resolved. Check SOURCE_CHATS and account access.")
 
     return source_chats
-
-
-async def download_media_with_optional_timeout(msg, file_path: str):
-    if MEDIA_DOWNLOAD_TIMEOUT_SECONDS <= 0:
-        return await msg.download_media(file=file_path)
-
-    return await asyncio.wait_for(
-        msg.download_media(file=file_path),
-        timeout=MEDIA_DOWNLOAD_TIMEOUT_SECONDS,
-    )
 
 
 # ==============================
@@ -399,9 +387,8 @@ async def process_message(msg):
         # Download and encode media (if present)
         if msg.media and isinstance(msg.media, (MessageMediaPhoto, MessageMediaDocument)):
             try:
-                telegram_image_path = f"temp_telegram_image_{msg.id}.jpg"
-                print("🖼️ Baixando imagem do Telegram para enviar ao WhatsApp...")
-                await download_media_with_optional_timeout(msg, telegram_image_path)
+                telegram_image_path = "temp_telegram_image.jpg"
+                await msg.download_media(file=telegram_image_path)
 
                 with open(telegram_image_path, "rb") as f:
                     file = f.read()
@@ -409,36 +396,18 @@ async def process_message(msg):
                     mime_type = "image/jpeg" if isinstance(msg.media, MessageMediaPhoto) else "application/octet-stream"
                     payload["base64Image"] = base64_img
                     payload["mimeType"] = mime_type
-                print("✅ Imagem baixada e anexada para envio ao WhatsApp.")
-            except asyncio.TimeoutError:
-                print("⚠️ Imagem demorou para baixar do Telegram. Enviando somente o texto.")
-                telegram_image_path = None
             except Exception as e:
-                print(f"⚠️ Imagem não baixada do Telegram. Enviando somente o texto: {e}")
-                telegram_image_path = None
+                print(f"❌ Error downloading image: {e}")
 
         # Send message to WhatsApp via local API
         sent_to_whatsapp = False
         try:
-            resp = requests.post("http://localhost:4000/send", json=payload, timeout=WHATSAPP_SEND_TIMEOUT_SECONDS)
+            resp = requests.post("http://localhost:4000/send", json=payload)
             if resp.status_code == 200:
                 print("✅ Mensagem enviada com sucesso para o WhatsApp.")
                 sent_to_whatsapp = True
-            elif resp.status_code in {400, 413} and "base64Image" in payload:
-                print("⚠️ Imagem recusada pelo WhatsApp/API local. Tentando reenviar somente o texto.")
-                text_only_payload = {"text": payload["text"]}
-                retry_resp = requests.post(
-                    "http://localhost:4000/send",
-                    json=text_only_payload,
-                    timeout=WHATSAPP_SEND_TIMEOUT_SECONDS,
-                )
-                if retry_resp.status_code == 200:
-                    print("✅ Mensagem enviada com sucesso para o WhatsApp sem imagem.")
-                    sent_to_whatsapp = True
-                else:
-                    print(f"❌ Mensagem não enviada para o WhatsApp: {retry_resp.status_code} - {retry_resp.text}")
             else:
-                print(f"❌ Mensagem não enviada para o WhatsApp: {resp.status_code} - {resp.text}")
+                print(f"❌ Mensagem não enviada para o WhatsApp: {resp.status_code}")
         except Exception as e:
             print(f"❌ Mensagem não enviada para o WhatsApp: {e}")
 
