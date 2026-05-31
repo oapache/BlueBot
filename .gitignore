@@ -21,6 +21,7 @@ __pycache__/
 # Logs e temporários
 *.log
 *.tmp
+.dedup_seen.json
 
 # Mac OS
 .DS_Store

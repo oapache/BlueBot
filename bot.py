@@ -11,6 +11,7 @@ import base64
 import unicodedata
 import time
 import hashlib
+import json
 from dotenv import load_dotenv
 
 # Affiliate link generators
@@ -91,13 +92,52 @@ def normalize_for_dedup(text: str) -> str:
     return re.sub(r'\s+', ' ', normalized).strip()
 
 
-def make_dedup_key(text: str, ml_links: list[str]) -> str:
+def hash_dedup_value(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def make_dedup_keys(text: str, ml_links: list[str]) -> list[str]:
+    keys = []
     if ml_links:
         normalized_links = sorted(link.rstrip(".,;:!?)\"]}'") for link in ml_links)
-        raw_key = "ml-links:" + "|".join(normalized_links)
-    else:
-        raw_key = "text:" + normalize_for_dedup(text)
-    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        keys.append(hash_dedup_value("ml-links:" + "|".join(normalized_links)))
+
+    normalized_text = normalize_for_dedup(text)
+    if normalized_text:
+        keys.append(hash_dedup_value("text:" + normalized_text))
+
+    return keys
+
+
+def load_seen_messages() -> dict[str, float]:
+    if not os.path.exists(DEDUP_STORE_PATH):
+        return {}
+
+    try:
+        with open(DEDUP_STORE_PATH, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        return {str(key): float(value) for key, value in raw_data.items()}
+    except Exception as e:
+        print(f"⚠️ Failed to load dedup store: {e}")
+        return {}
+
+
+def save_seen_messages():
+    try:
+        with open(DEDUP_STORE_PATH, "w", encoding="utf-8") as f:
+            json.dump(seen_message_keys, f)
+    except Exception as e:
+        print(f"⚠️ Failed to save dedup store: {e}")
+
+
+def is_duplicate_offer(dedup_keys: list[str], now: float) -> bool:
+    return any(key in seen_message_keys for key in dedup_keys)
+
+
+def remember_offer(dedup_keys: list[str], now: float):
+    for key in dedup_keys:
+        seen_message_keys[key] = now
+    save_seen_messages()
 
 
 def cleanup_seen_messages(now: float):
@@ -108,6 +148,8 @@ def cleanup_seen_messages(now: float):
     ]
     for key in expired_keys:
         del seen_message_keys[key]
+    if expired_keys:
+        save_seen_messages()
 
 # Telegram source and optional destination groups
 SOURCE_CHATS = parse_chat_targets_env()
@@ -137,6 +179,7 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
     "on",
 }
 DEDUP_TTL_SECONDS = int(os.getenv("DEDUP_TTL_SECONDS", "21600"))
+DEDUP_STORE_PATH = os.getenv("DEDUP_STORE_PATH", ".dedup_seen.json")
 
 print(
     "⚙️ Marketplaces enabled:",
@@ -156,7 +199,7 @@ filters = [unicodedata.normalize("NFKD", f) for f in filters]
 # Initialize Telegram client
 client = TelegramClient("polling_session", api_id, api_hash)
 last_ids: dict[str, int] = {}
-seen_message_keys: dict[str, float] = {}
+seen_message_keys: dict[str, float] = load_seen_messages()
 destination_group = None
 
 
@@ -274,11 +317,11 @@ async def process_message(msg):
 
         now = time.time()
         cleanup_seen_messages(now)
-        dedup_key = make_dedup_key(text, ml_links)
-        if dedup_key in seen_message_keys:
+        dedup_keys = make_dedup_keys(text, ml_links)
+        if is_duplicate_offer(dedup_keys, now):
             print("⚠️ Message ignored (duplicate offer already processed).")
             return
-        seen_message_keys[dedup_key] = now
+        remember_offer(dedup_keys, now)
 
         # ==============================
         # 💰 Mercado Livre
