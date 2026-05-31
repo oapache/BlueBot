@@ -42,6 +42,7 @@ const targetGroups = parseEnvList('WHATSAPP_TARGET_GROUPS');
  *              avoiding repeated lookups or API calls.
  */
 let groupsCache: { name: string; id: string }[] = [];
+let isClientReady = false;
 
 /**
  * @constant client
@@ -129,6 +130,7 @@ client.on('loading_screen', (percent: string | number, message: string) => {
 });
 
 client.on('disconnected', (reason: string) => {
+  isClientReady = false;
   console.warn('⚠️ WhatsApp disconnected:', reason);
 });
 
@@ -143,6 +145,7 @@ client.on('change_state', (state: string) => {
  */
 client.on('ready', async () => {
   console.log('✅ WhatsApp client is ready and authenticated.');
+  isClientReady = true;
   const chats = await client.getChats();
   const normalizedTargets = new Set(targetGroups.map(normalizeGroupName));
 
@@ -173,6 +176,10 @@ client.on('ready', async () => {
  * @param mimeType - Optional MIME type (e.g. 'image/jpeg').
  */
 async function sendToGroups(text: string, base64Image?: string, mimeType?: string) {
+  if (!isClientReady) {
+    throw new Error('WhatsApp client is not ready yet.');
+  }
+
   if (groupsCache.length === 0) {
     throw new Error('No WhatsApp groups are currently cached.');
   }
@@ -232,6 +239,13 @@ async function sendToGroups(text: string, base64Image?: string, mimeType?: strin
  */
 app.post('/send', async (req: Request, res: Response) => {
   const { text, base64Image, mimeType } = req.body;
+  console.log('📨 /send received', {
+    isClientReady,
+    cachedGroups: groupsCache.map((group) => group.name),
+    hasImage: Boolean(base64Image),
+    textPreview: typeof text === 'string' ? text.slice(0, 80) : null,
+  });
+
   try {
     const result = await sendToGroups(text, base64Image, mimeType);
     res.status(200).send({ status: 'ok', ...result });
@@ -240,6 +254,8 @@ app.post('/send', async (req: Request, res: Response) => {
     res.status(500).send({
       error: 'Error sending message',
       details: err instanceof Error ? err.message : String(err),
+      isClientReady,
+      cachedGroups: groupsCache.map((group) => group.name),
     });
   }
 });

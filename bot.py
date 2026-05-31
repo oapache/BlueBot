@@ -321,7 +321,6 @@ async def process_message(msg):
         if is_duplicate_offer(dedup_keys, now):
             print("⚠️ Message ignored (duplicate offer already processed).")
             return
-        remember_offer(dedup_keys, now)
 
         # ==============================
         # 💰 Mercado Livre
@@ -401,14 +400,19 @@ async def process_message(msg):
                 print(f"❌ Error downloading image: {e}")
 
         # Send message to WhatsApp via local API
+        sent_to_whatsapp = False
         try:
-            resp = requests.post("http://localhost:4000/send", json=payload)
+            resp = requests.post("http://localhost:4000/send", json=payload, timeout=60)
             if resp.status_code == 200:
                 print("✅ Message sent to WhatsApp!")
+                sent_to_whatsapp = True
             else:
-                print(f"❌ Failed to send to WhatsApp: {resp.status_code}")
+                print(f"❌ Failed to send to WhatsApp: {resp.status_code} - {resp.text}")
         except Exception as e:
             print(f"❌ Error sending to WhatsApp: {e}")
+
+        if sent_to_whatsapp:
+            remember_offer(dedup_keys, time.time())
 
         # Forward message to Telegram destination group if enabled
         try:
