@@ -180,9 +180,6 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
 }
 DEDUP_TTL_SECONDS = int(os.getenv("DEDUP_TTL_SECONDS", "21600"))
 DEDUP_STORE_PATH = os.getenv("DEDUP_STORE_PATH", ".dedup_seen.json")
-WHATSAPP_SEND_URL = os.getenv("WHATSAPP_SEND_URL", "http://localhost:4000/send")
-WHATSAPP_SEND_RETRIES = int(os.getenv("WHATSAPP_SEND_RETRIES", "3"))
-WHATSAPP_SEND_RETRY_DELAY_SECONDS = float(os.getenv("WHATSAPP_SEND_RETRY_DELAY_SECONDS", "5"))
 
 print(
     "⚙️ Marketplaces enabled:",
@@ -232,33 +229,6 @@ async def resolve_source_chats(targets):
         raise RuntimeError("No Telegram source chats could be resolved. Check SOURCE_CHATS and account access.")
 
     return source_chats
-
-
-async def send_payload_to_whatsapp(payload) -> bool:
-    for attempt in range(1, WHATSAPP_SEND_RETRIES + 1):
-        try:
-            resp = requests.post(WHATSAPP_SEND_URL, json=payload, timeout=60)
-            if resp.status_code == 200:
-                print("✅ Mensagem enviada com sucesso para o WhatsApp.")
-                return True
-
-            print(
-                f"❌ Mensagem não enviada para o WhatsApp "
-                f"(tentativa {attempt}/{WHATSAPP_SEND_RETRIES}): {resp.status_code} - {resp.text}"
-            )
-
-            if resp.status_code < 500:
-                return False
-        except requests.exceptions.RequestException as e:
-            print(
-                f"❌ Mensagem não enviada para o WhatsApp "
-                f"(tentativa {attempt}/{WHATSAPP_SEND_RETRIES}): {e}"
-            )
-
-        if attempt < WHATSAPP_SEND_RETRIES:
-            await asyncio.sleep(WHATSAPP_SEND_RETRY_DELAY_SECONDS)
-
-    return False
 
 
 # ==============================
@@ -430,7 +400,16 @@ async def process_message(msg):
                 print(f"❌ Error downloading image: {e}")
 
         # Send message to WhatsApp via local API
-        sent_to_whatsapp = await send_payload_to_whatsapp(payload)
+        sent_to_whatsapp = False
+        try:
+            resp = requests.post("http://localhost:4000/send", json=payload)
+            if resp.status_code == 200:
+                print("✅ Mensagem enviada com sucesso para o WhatsApp.")
+                sent_to_whatsapp = True
+            else:
+                print(f"❌ Mensagem não enviada para o WhatsApp: {resp.status_code} - {resp.text}")
+        except Exception as e:
+            print(f"❌ Mensagem não enviada para o WhatsApp: {e}")
 
         if sent_to_whatsapp:
             remember_offer(dedup_keys, time.time())
