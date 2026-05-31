@@ -180,7 +180,7 @@ ENABLE_ALIEXPRESS = os.getenv("ENABLE_ALIEXPRESS", "false").strip().lower() in {
 }
 DEDUP_TTL_SECONDS = int(os.getenv("DEDUP_TTL_SECONDS", "21600"))
 DEDUP_STORE_PATH = os.getenv("DEDUP_STORE_PATH", ".dedup_seen.json")
-MEDIA_DOWNLOAD_TIMEOUT_SECONDS = float(os.getenv("MEDIA_DOWNLOAD_TIMEOUT_SECONDS", "15"))
+MEDIA_DOWNLOAD_TIMEOUT_SECONDS = float(os.getenv("MEDIA_DOWNLOAD_TIMEOUT_SECONDS", "0"))
 WHATSAPP_SEND_TIMEOUT_SECONDS = float(os.getenv("WHATSAPP_SEND_TIMEOUT_SECONDS", "60"))
 
 print(
@@ -231,6 +231,16 @@ async def resolve_source_chats(targets):
         raise RuntimeError("No Telegram source chats could be resolved. Check SOURCE_CHATS and account access.")
 
     return source_chats
+
+
+async def download_media_with_optional_timeout(msg, file_path: str):
+    if MEDIA_DOWNLOAD_TIMEOUT_SECONDS <= 0:
+        return await msg.download_media(file=file_path)
+
+    return await asyncio.wait_for(
+        msg.download_media(file=file_path),
+        timeout=MEDIA_DOWNLOAD_TIMEOUT_SECONDS,
+    )
 
 
 # ==============================
@@ -390,10 +400,8 @@ async def process_message(msg):
         if msg.media and isinstance(msg.media, (MessageMediaPhoto, MessageMediaDocument)):
             try:
                 telegram_image_path = f"temp_telegram_image_{msg.id}.jpg"
-                await asyncio.wait_for(
-                    msg.download_media(file=telegram_image_path),
-                    timeout=MEDIA_DOWNLOAD_TIMEOUT_SECONDS,
-                )
+                print("🖼️ Baixando imagem do Telegram para enviar ao WhatsApp...")
+                await download_media_with_optional_timeout(msg, telegram_image_path)
 
                 with open(telegram_image_path, "rb") as f:
                     file = f.read()
@@ -401,6 +409,7 @@ async def process_message(msg):
                     mime_type = "image/jpeg" if isinstance(msg.media, MessageMediaPhoto) else "application/octet-stream"
                     payload["base64Image"] = base64_img
                     payload["mimeType"] = mime_type
+                print("✅ Imagem baixada e anexada para envio ao WhatsApp.")
             except asyncio.TimeoutError:
                 print("⚠️ Imagem demorou para baixar do Telegram. Enviando somente o texto.")
                 telegram_image_path = None
