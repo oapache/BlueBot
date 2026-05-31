@@ -26,7 +26,7 @@ function normalizeGroupName(name: string): string {
  */
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '30mb' }));
 
 /**
  * @constant targetGroups

@@ -406,6 +406,15 @@ async def process_message(msg):
             if resp.status_code == 200:
                 print("✅ Mensagem enviada com sucesso para o WhatsApp.")
                 sent_to_whatsapp = True
+            elif resp.status_code in {400, 413} and "base64Image" in payload:
+                print("⚠️ Imagem recusada pelo WhatsApp/API local. Tentando reenviar somente o texto.")
+                text_only_payload = {"text": payload["text"]}
+                retry_resp = requests.post("http://localhost:4000/send", json=text_only_payload)
+                if retry_resp.status_code == 200:
+                    print("✅ Mensagem enviada com sucesso para o WhatsApp sem imagem.")
+                    sent_to_whatsapp = True
+                else:
+                    print(f"❌ Mensagem não enviada para o WhatsApp: {retry_resp.status_code} - {retry_resp.text}")
             else:
                 print(f"❌ Mensagem não enviada para o WhatsApp: {resp.status_code} - {resp.text}")
         except Exception as e:
