@@ -319,7 +319,7 @@ async def process_message(msg):
         cleanup_seen_messages(now)
         dedup_keys = make_dedup_keys(text, ml_links)
         if is_duplicate_offer(dedup_keys, now):
-            print("⚠️ Message ignored (duplicate offer already processed).")
+            print("🚫 Mensagem não enviada porque é duplicada.")
             return
 
         # ==============================
@@ -404,12 +404,12 @@ async def process_message(msg):
         try:
             resp = requests.post("http://localhost:4000/send", json=payload, timeout=60)
             if resp.status_code == 200:
-                print("✅ Message sent to WhatsApp!")
+                print("✅ Mensagem enviada com sucesso para o WhatsApp.")
                 sent_to_whatsapp = True
             else:
-                print(f"❌ Failed to send to WhatsApp: {resp.status_code} - {resp.text}")
+                print(f"❌ Mensagem não enviada para o WhatsApp: {resp.status_code} - {resp.text}")
         except Exception as e:
-            print(f"❌ Error sending to WhatsApp: {e}")
+            print(f"❌ Mensagem não enviada para o WhatsApp: {e}")
 
         if sent_to_whatsapp:
             remember_offer(dedup_keys, time.time())
