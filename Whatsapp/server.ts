@@ -26,7 +26,7 @@ function normalizeGroupName(name: string): string {
  */
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '30mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 /**
  * @constant targetGroups
@@ -42,7 +42,6 @@ const targetGroups = parseEnvList('WHATSAPP_TARGET_GROUPS');
  *              avoiding repeated lookups or API calls.
  */
 let groupsCache: { name: string; id: string }[] = [];
-let isClientReady = false;
 
 /**
  * @constant client
@@ -55,57 +54,6 @@ const client = new Client({
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   },
 });
-
-process.on('unhandledRejection', (reason) => {
-  console.error('🧪 DEBUG unhandledRejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('🧪 DEBUG uncaughtException:', error);
-});
-
-const internalClient = client as any;
-const originalInject = internalClient.inject.bind(client);
-internalClient.inject = (async (...args: any[]) => {
-  const page = internalClient.pupPage;
-  console.log('🧪 DEBUG inject:start', {
-    hasPage: Boolean(page),
-    url: page?.url?.() ?? 'unavailable',
-  });
-
-  try {
-    const result = await originalInject(...args);
-    console.log('🧪 DEBUG inject:success', {
-      url: page?.url?.() ?? 'unavailable',
-    });
-    return result;
-  } catch (error) {
-    let readyState = 'unavailable';
-    let title = 'unavailable';
-
-    if (page) {
-      try {
-        readyState = await page.evaluate(() => document.readyState);
-      } catch (evaluateError) {
-        readyState = `evaluate_failed: ${String(evaluateError)}`;
-      }
-
-      try {
-        title = await page.title();
-      } catch (titleError) {
-        title = `title_failed: ${String(titleError)}`;
-      }
-    }
-
-    console.error('🧪 DEBUG inject:error', {
-      error,
-      url: page?.url?.() ?? 'unavailable',
-      readyState,
-      title,
-    });
-    throw error;
-  }
-}) as typeof originalInject;
 
 /**
  * QR Code event handler
@@ -130,12 +78,7 @@ client.on('loading_screen', (percent: string | number, message: string) => {
 });
 
 client.on('disconnected', (reason: string) => {
-  isClientReady = false;
   console.warn('⚠️ WhatsApp disconnected:', reason);
-});
-
-client.on('change_state', (state: string) => {
-  console.log('🧪 DEBUG change_state:', state);
 });
 
 /**
@@ -145,7 +88,6 @@ client.on('change_state', (state: string) => {
  */
 client.on('ready', async () => {
   console.log('✅ WhatsApp client is ready and authenticated.');
-  isClientReady = true;
   const chats = await client.getChats();
   const normalizedTargets = new Set(targetGroups.map(normalizeGroupName));
 
@@ -176,16 +118,10 @@ client.on('ready', async () => {
  * @param mimeType - Optional MIME type (e.g. 'image/jpeg').
  */
 async function sendToGroups(text: string, base64Image?: string, mimeType?: string) {
-  if (!isClientReady) {
-    throw new Error('WhatsApp client is not ready yet.');
-  }
-
   if (groupsCache.length === 0) {
-    throw new Error('No WhatsApp groups are currently cached.');
+    console.warn('⚠️ No groups loaded. Make sure the target group names exist.');
+    return;
   }
-
-  let successCount = 0;
-  const failures: { group: string; error: string }[] = [];
 
   for (const group of groupsCache) {
     try {
@@ -198,28 +134,13 @@ async function sendToGroups(text: string, base64Image?: string, mimeType?: strin
         await client.sendMessage(group.id, text);
       }
       console.log(`📤 Message successfully sent to ${group.name}`);
-      successCount += 1;
     } catch (err: any) {
       console.error(`❌ Error sending to ${group.name}:`, err);
-      failures.push({
-        group: group.name,
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
 
     // Wait 1s between sends to reduce risk of being flagged
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-
-  if (successCount === 0) {
-    throw new Error(`Failed to send message to every configured WhatsApp group: ${JSON.stringify(failures)}`);
-  }
-
-  return {
-    successCount,
-    failureCount: failures.length,
-    failures,
-  };
 }
 
 /**
@@ -239,33 +160,13 @@ async function sendToGroups(text: string, base64Image?: string, mimeType?: strin
  */
 app.post('/send', async (req: Request, res: Response) => {
   const { text, base64Image, mimeType } = req.body;
-  console.log('📨 /send received', {
-    isClientReady,
-    cachedGroups: groupsCache.map((group) => group.name),
-    hasImage: Boolean(base64Image),
-    textPreview: typeof text === 'string' ? text.slice(0, 80) : null,
-  });
-
   try {
-    const result = await sendToGroups(text, base64Image, mimeType);
-    res.status(200).send({ status: 'ok', ...result });
+    await sendToGroups(text, base64Image, mimeType);
+    res.status(200).send({ status: 'ok' });
   } catch (err: any) {
     console.error('❌ Error sending message:', err);
-    res.status(500).send({
-      error: 'Error sending message',
-      details: err instanceof Error ? err.message : String(err),
-      isClientReady,
-      cachedGroups: groupsCache.map((group) => group.name),
-    });
+    res.status(500).send({ error: 'Error sending message' });
   }
-});
-
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).send({
-    status: 'ok',
-    isClientReady,
-    cachedGroups: groupsCache.map((group) => group.name),
-  });
 });
 
 /**
